@@ -35,6 +35,9 @@
                 데이터를 연결하는 중입니다...
             </p>
         </div>
+        <button onclick="manualSync()" id="sync-btn" class="mb-1 w-10 h-10 rounded-full bg-white shadow-sm border border-gray-200 text-gray-500 hover:text-[#3182f6] hover:border-[#3182f6] flex items-center justify-center transition-all active:scale-95 shrink-0" title="수동 동기화">
+            <i class="fa-solid fa-rotate"></i>
+        </button>
     </header>
 
     <main class="px-5 max-w-md mx-auto space-y-6">
@@ -134,7 +137,7 @@
     <!-- Firebase 통신 로직 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
         // 유저님께서 입력해주신 실제 키값 그대로 적용
@@ -210,49 +213,82 @@
             const currentMonthNum = new Date().getMonth() + 1;
             document.getElementById('monthly-title').innerText = `당월 배당금 (${currentMonthNum}월)`;
 
+            // 💡 화면 그리기 로직 분리 (자동 & 수동 동기화에서 공통 사용)
+            const updateDashboardUI = (data) => {
+                const lt = data.longTerm || {};
+                const div = data.dividend || {};
+
+                const lt_p = lt.principal || 0; const lt_v = lt.totalValue || 0; const lt_pf = lt.profit || 0; const lt_r = lt.rate || 0;
+                const div_p = div.principal || 0; const div_v = div.totalValue || 0; const div_pf = div.profit || 0; const div_r = div.rate || 0;
+                const div_acc = div.totalDivs || 0; const div_cap = div.capitalGain || 0;
+
+                const total_p = lt_p + div_p; const total_v = lt_v + div_v; const total_pf = lt_pf + div_pf;
+                const total_r = total_p > 0 ? (total_pf / total_p) * 100 : 0;
+
+                document.getElementById('total-val').innerText = total_v === 0 ? '0원' : formatKRW(total_v);
+                document.getElementById('total-principal').innerText = formatKRW(total_p);
+                applyProfitDisplay('total-profit', total_pf, total_r, true);
+
+                document.getElementById('lt-principal').innerText = formatKRW(lt_p);
+                document.getElementById('lt-val').innerText = formatKRW(lt_v);
+                applyProfitDisplay('lt-profit', lt_pf, lt_r, false);
+
+                document.getElementById('div-principal').innerText = formatKRW(div_p);
+                document.getElementById('div-val').innerText = formatKRW(div_v);
+                applyProfitDisplay('div-profit', div_pf, div_r, false);
+                
+                document.getElementById('div-acc').innerText = `+${formatKRW(div_acc)}`;
+                applyColorAndSign('div-capgain', div_cap, false);
+
+                const currentMonthDividend = div.monthlyDivs ? (div.monthlyDivs[currentMonthNum] || 0) : 0;
+                document.getElementById('div-monthly').innerText = currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원';
+
+                const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
+                const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
+                let latestTimeStr = "기록 없음";
+                if (t1 > 0 || t2 > 0) {
+                    latestTimeStr = new Date(Math.max(t1, t2)).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                }
+                document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-blue-500 mr-1"></i> 마지막 동기화: ${latestTimeStr}`;
+                document.getElementById('error-toast').classList.add('hidden');
+            };
+
+            // 💡 수동 동기화(새로고침) 버튼 클릭 이벤트
+            window.manualSync = async () => {
+                const btnIcon = document.querySelector('#sync-btn i');
+                if (btnIcon) btnIcon.classList.add('fa-spin'); // 아이콘 회전 시작
+                
+                try {
+                    const user = auth.currentUser;
+                    if (user && db) {
+                        const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
+                        const snapshot = await getDoc(docRef);
+                        if (snapshot.exists()) {
+                            updateDashboardUI(snapshot.data());
+                            
+                            // 성공 시 잠깐 반짝이는 텍스트 효과
+                            const timeText = document.getElementById('last-update-time');
+                            const originalHtml = timeText.innerHTML;
+                            timeText.innerHTML = `<span class="text-blue-500 font-bold"><i class="fa-solid fa-arrows-rotate fa-spin mr-1"></i> 데이터 최신화 완료!</span>`;
+                            setTimeout(() => { timeText.innerHTML = originalHtml; }, 1500);
+                        }
+                    }
+                } catch (err) {
+                    console.error("수동 동기화 에러:", err);
+                } finally {
+                    setTimeout(() => {
+                        if (btnIcon) btnIcon.classList.remove('fa-spin'); // 아이콘 회전 종료
+                    }, 500);
+                }
+            };
+
             onAuthStateChanged(auth, (user) => {
                 if (user && db) {
                     const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
                     
                     onSnapshot(docRef, (snapshot) => {
                         if (snapshot.exists()) {
-                            const data = snapshot.data();
-                            const lt = data.longTerm || {};
-                            const div = data.dividend || {};
-
-                            const lt_p = lt.principal || 0; const lt_v = lt.totalValue || 0; const lt_pf = lt.profit || 0; const lt_r = lt.rate || 0;
-                            const div_p = div.principal || 0; const div_v = div.totalValue || 0; const div_pf = div.profit || 0; const div_r = div.rate || 0;
-                            const div_acc = div.totalDivs || 0; const div_cap = div.capitalGain || 0;
-
-                            const total_p = lt_p + div_p; const total_v = lt_v + div_v; const total_pf = lt_pf + div_pf;
-                            const total_r = total_p > 0 ? (total_pf / total_p) * 100 : 0;
-
-                            document.getElementById('total-val').innerText = total_v === 0 ? '0원' : formatKRW(total_v);
-                            document.getElementById('total-principal').innerText = formatKRW(total_p);
-                            applyProfitDisplay('total-profit', total_pf, total_r, true);
-
-                            document.getElementById('lt-principal').innerText = formatKRW(lt_p);
-                            document.getElementById('lt-val').innerText = formatKRW(lt_v);
-                            applyProfitDisplay('lt-profit', lt_pf, lt_r, false);
-
-                            document.getElementById('div-principal').innerText = formatKRW(div_p);
-                            document.getElementById('div-val').innerText = formatKRW(div_v);
-                            applyProfitDisplay('div-profit', div_pf, div_r, false);
-                            
-                            document.getElementById('div-acc').innerText = `+${formatKRW(div_acc)}`;
-                            applyColorAndSign('div-capgain', div_cap, false);
-
-                            const currentMonthDividend = div.monthlyDivs ? (div.monthlyDivs[currentMonthNum] || 0) : 0;
-                            document.getElementById('div-monthly').innerText = currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원';
-
-                            const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
-                            const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
-                            let latestTimeStr = "기록 없음";
-                            if (t1 > 0 || t2 > 0) {
-                                latestTimeStr = new Date(Math.max(t1, t2)).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                            }
-                            document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-blue-500 mr-1"></i> 마지막 동기화: ${latestTimeStr}`;
-                            document.getElementById('error-toast').classList.add('hidden');
+                            updateDashboardUI(snapshot.data());
                         }
                     }, (err) => {
                         console.error("DB 에러:", err);
