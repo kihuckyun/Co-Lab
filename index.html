@@ -1,263 +1,255 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>기르&써니 자산현황</title>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React, { useState, useEffect } from 'react';
+import { Wallet, TrendingUp, DollarSign, Activity } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
 
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-</head>
-<body class="bg-[#f4f6f8] text-[#333d4b] font-sans selection:bg-[#3182f6] selection:text-white">
-  
-  <div id="root"></div>
+// =====================================================================
+// 💡 [마지막 세팅] 본인의 Firebase 설정값 6가지를 아래에 꼭 넣어주세요!
+// =====================================================================
+const myFirebaseConfig = {
+  // apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
+  // authDomain: "total-asset-f1796.firebaseapp.com",
+  // projectId: "total-asset-f1796",
+  // storageBucket: "total-asset-f1796.firebasestorage.app",
+  // messagingSenderId: "441490194600",
+  // appId: "1:441490194600:web:bd4889cb0796dd4694429d"
+};
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+const firebaseConfig = Object.keys(myFirebaseConfig).length > 0 ? myFirebaseConfig : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
+const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
 
-    // =====================================================================
-    // 💡 [수정 완료] 아래와 같이 앞에 // 기호가 없어야 정상 작동합니다!
-    // =====================================================================
-    const firebaseConfig = {
-      apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
-      authDomain: "total-asset-f1796.firebaseapp.com",
-      projectId: "total-asset-f1796",
-      storageBucket: "total-asset-f1796.firebasestorage.app",
-      messagingSenderId: "441490194600",
-      appId: "1:441490194600:web:bd4889cb0796dd4694429d"
-    };
+// 기본 뼈대 데이터 (데이터가 오기 전 빈 화면)
+const defaultData = {
+  longTerm: { principal: 0, totalValue: 0, profit: 0, rate: 0, timestamp: null },
+  dividend: { principal: 0, rawPrincipal: 0, totalValue: 0, capitalGain: 0, totalDivs: 0, profit: 0, rate: 0, monthlyDivs: {}, timestamp: null },
+  total: { principal: 0, totalValue: 0, profit: 0, rate: 0 },
+  latestTimestamp: null,
+};
 
-    // 파이어베이스 초기화 연결
-    if (!firebase.apps.length && Object.keys(firebaseConfig).length > 0) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    const auth = firebase.apps.length > 0 ? firebase.auth() : null;
-    const db = firebase.apps.length > 0 ? firebase.firestore() : null;
-    const appId = 'gire-sunny-asset-app';
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [assetData, setAssetData] = useState(defaultData);
+  const [error, setError] = useState(null);
 
-    // 아이콘 직접 그리기 (Lucide 대체)
-    const Icon = {
-      Plus: () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
-      Cloud: ({ className }) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg>,
-      Refresh: ({ className }) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>,
-      Wallet: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path></svg>,
-      TrendingUp: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>,
-      DollarSign: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>,
-      ChevronRight: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-    };
-
-    const defaultData = {
-      longTerm: { principal: 0, totalValue: 0, profit: 0, rate: 0 },
-      dividend: { principal: 0, rawPrincipal: 0, totalValue: 0, capitalGain: 0, totalDivs: 0, profit: 0, rate: 0, monthlyDivs: {} },
-      total: { principal: 0, totalValue: 0, profit: 0, rate: 0 },
-      timestamp: null,
-      isLocal: false,
-    };
-
-    function App() {
-      const [user, setUser] = useState(null);
-      const [assetData, setAssetData] = useState(defaultData);
-      const [isUploading, setIsUploading] = useState(false);
-      const [error, setError] = useState(null);
-      const [toastMsg, setToastMsg] = useState('');
-      const fileInputRef = useRef(null);
-
-      // 1. 로그인 인증
-      useEffect(() => {
-        if (!auth) return;
-        auth.signInAnonymously().catch(err => console.error("Auth Error:", err));
-        const unsubscribeAuth = auth.onAuthStateChanged(setUser);
-        return () => unsubscribeAuth();
-      }, []);
-
-      // 2. 파이어베이스 실시간 연동
-      useEffect(() => {
-        if (!user || !db) return;
-        const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('shared_assets').doc('latest_status');
-        const unsubscribeDB = docRef.onSnapshot((snapshot) => {
-          if (snapshot.exists && !assetData.isLocal) {
-            setAssetData({ ...snapshot.data(), isLocal: false });
-          }
-        }, (err) => console.error("Firestore Error:", err));
-        return () => unsubscribeDB();
-      }, [user, assetData.isLocal]);
-
-      // 알림 메시지 타이머
-      useEffect(() => {
-        if (toastMsg) {
-          const timer = setTimeout(() => setToastMsg(''), 3000);
-          return () => clearTimeout(timer);
+  // 1. Firebase 인증 (권한 획득)
+  useEffect(() => {
+    if (!app) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-      }, [toastMsg]);
+      } catch (err) {
+        console.error("인증 에러:", err);
+      }
+    };
+    initAuth();
 
-      const formatKRW = (num) => new Intl.NumberFormat('ko-KR').format(Math.round(num)) + '원';
+    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
+    return () => unsubscribeAuth();
+  }, []);
 
-      const parseLongTermData = (json) => {
-        const history = json.history || [];
-        const lastEntry = history[history.length - 1] || {};
-        const principal = lastEntry.principal || json.core?.total_principal || 0;
-        const totalValue = lastEntry.total || 0;
-        const profit = totalValue - principal;
-        const rate = principal > 0 ? (profit / principal) * 100 : 0;
-        return { principal, totalValue, profit, rate };
-      };
+  // 2. 실시간 데이터 수신 (업로드 기능 삭제, 순수 리스너 역할만 수행)
+  useEffect(() => {
+    if (!user || !db) return;
 
-      const parseDividendData = (json) => {
-        let rawPrincipal = 0, totalValue = 0, totalDivs = 0, monthlyDivs = {};
-        if (json.accounts) {
-          json.accounts.forEach(acc => {
-            acc.holdings?.forEach(hold => {
-              const boughtValue = (hold.avgPrice || 0) * (hold.quantity || 0);
-              rawPrincipal += boughtValue;
-              totalValue += hold.currentAssetSnapshot || boughtValue;
-              if (hold.monthlyDividends) {
-                Object.keys(hold.monthlyDividends).forEach(month => {
-                  const amt = hold.monthlyDividends[month].amount;
-                  monthlyDivs[month] = (monthlyDivs[month] || 0) + amt;
-                  totalDivs += amt;
-                });
-              }
-            });
-          });
-        }
-        const principal = rawPrincipal - totalDivs;
-        const capitalGain = totalValue - rawPrincipal;
-        const profit = totalValue - principal; 
-        const rate = principal > 0 ? (profit / principal) * 100 : 0;
-        return { principal, rawPrincipal, totalValue, capitalGain, totalDivs, profit, rate, monthlyDivs };
-      };
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_assets', 'latest_status');
+    const unsubscribeDB = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        // 장투와 배당 앱에서 각각 날아온 데이터를 병합
+        const lt = data.longTerm || defaultData.longTerm;
+        const div = data.dividend || defaultData.dividend;
 
-      const handleFileUpload = (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            try {
-              const json = JSON.parse(event.target.result);
-              setAssetData(prev => {
-                const newData = { ...prev, isLocal: true };
-                if (json.core && json.history) newData.longTerm = parseLongTermData(json);
-                else if (json.accounts) newData.dividend = parseDividendData(json);
-                newData.total.principal = newData.longTerm.principal + newData.dividend.principal;
-                newData.total.totalValue = newData.longTerm.totalValue + newData.dividend.totalValue;
-                newData.total.profit = newData.longTerm.profit + newData.dividend.profit;
-                newData.total.rate = newData.total.principal > 0 ? (newData.total.profit / newData.total.principal) * 100 : 0;
-                return newData;
-              });
-              setError(null);
-            } catch (err) { setError("파일 형식 오류가 발생했습니다."); }
-          };
-          reader.readAsText(file);
+        // Total 자산 자동 합산
+        const totalPrincipal = (lt.principal || 0) + (div.principal || 0);
+        const totalValue = (lt.totalValue || 0) + (div.totalValue || 0);
+        const totalProfit = (lt.profit || 0) + (div.profit || 0);
+        const totalRate = totalPrincipal > 0 ? (totalProfit / totalPrincipal) * 100 : 0;
+
+        // 가장 최근에 업데이트된 시간 찾기
+        const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
+        const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
+        const latestTime = t1 > t2 ? lt.timestamp : div.timestamp;
+
+        setAssetData({
+          longTerm: lt,
+          dividend: div,
+          total: { principal: totalPrincipal, totalValue: totalValue, profit: totalProfit, rate: totalRate },
+          latestTimestamp: latestTime
         });
-        setToastMsg("데이터가 화면에 반영되었습니다.");
-        e.target.value = '';
-      };
+      }
+    }, (err) => {
+      console.error("데이터 수신 에러:", err);
+      setError("데이터를 불러오지 못했습니다.");
+    });
 
-      const handleSyncData = async () => {
-        if (!user || !db) {
-          setError("클라우드 연결 오류");
-          return;
-        }
-        setIsUploading(true);
-        const dataToSave = { ...assetData, timestamp: new Date().toISOString(), isLocal: false };
-        try {
-          const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('shared_assets').doc('latest_status');
-          await docRef.set(dataToSave);
-          setAssetData(dataToSave);
-          setToastMsg("아내분 폰에도 성공적으로 공유되었습니다.");
-        } catch (err) { setError("클라우드 저장 실패"); }
-        finally { setIsUploading(false); }
-      };
+    return () => unsubscribeDB();
+  }, [user]);
 
-      const currentMonthNum = new Date().getMonth() + 1;
-      const currentMonthDividend = assetData.dividend.monthlyDivs[currentMonthNum] || 0;
+  // 포맷팅 헬퍼
+  const formatKRW = (num) => new Intl.NumberFormat('ko-KR').format(Math.round(num || 0)) + '원';
 
-      const getColorClass = (value, isDark = false) => {
-        if (value > 0) return isDark ? 'text-[#ff5f6d]' : 'text-[#f04452]';
-        if (value < 0) return isDark ? 'text-[#4facfe]' : 'text-[#3182f6]';
-        return isDark ? 'text-gray-300' : 'text-[#333d4b]';
-      };
+  // 상승/하락 색상 헬퍼
+  const getColorClass = (value, isDark = false) => {
+    if (value > 0) return isDark ? 'text-[#ff5f6d]' : 'text-[#f04452]';
+    if (value < 0) return isDark ? 'text-[#4facfe]' : 'text-[#3182f6]';
+    return isDark ? 'text-gray-300' : 'text-[#333d4b]';
+  };
 
-      return (
-        <div className="pb-28">
-          {/* 알림 토스트 */}
-          <div className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center gap-2 px-4 pointer-events-none">
-            {error && <div className="bg-white/90 text-red-600 px-5 py-3 rounded-full shadow-lg pointer-events-auto font-bold">{error}</div>}
-            {toastMsg && <div className="bg-[#2c2c2e]/90 text-white px-6 py-3 rounded-full shadow-lg pointer-events-auto font-semibold">{toastMsg}</div>}
+  // 날짜 계산 (당월 배당금 표시용)
+  const currentMonthNum = new Date().getMonth() + 1;
+  const currentMonthDividend = assetData.dividend.monthlyDivs ? (assetData.dividend.monthlyDivs[currentMonthNum] || 0) : 0;
+
+  return (
+    <div className="min-h-screen bg-[#f4f6f8] text-[#333d4b] pb-20 font-sans relative selection:bg-[#3182f6] selection:text-white">
+      
+      {/* 에러 알림 */}
+      {error && (
+        <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="bg-red-100 text-red-600 px-5 py-3 rounded-full shadow-md font-bold text-sm">
+            {error}
+          </div>
+        </div>
+      )}
+
+      {/* 헤더 */}
+      <header className="px-5 pt-12 pb-6 flex justify-between items-end sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
+        <div>
+          <h1 className="text-[26px] font-extrabold text-[#191f28] tracking-tight flex items-center gap-2">
+            기르&써니 자산현황 <Activity className="w-5 h-5 text-emerald-500 animate-pulse" />
+          </h1>
+          <p className="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
+            {assetData.latestTimestamp 
+              ? `마지막 동기화: ${new Date(assetData.latestTimestamp).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` 
+              : '데이터를 기다리는 중입니다...'}
+          </p>
+        </div>
+      </header>
+
+      <main className="px-5 max-w-md mx-auto space-y-6">
+        
+        {/* 1. Total 자산 메인 카드 */}
+        <div className="bg-gradient-to-br from-[#1c1c1e] via-[#252528] to-[#2c2c2e] rounded-[32px] p-7 shadow-[0_16px_40px_rgba(0,0,0,0.15)] border border-white/10 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+          <div className="flex items-center space-x-2 mb-2">
+            <Wallet className="w-4 h-4 text-gray-400" />
+            <p className="text-[14px] text-gray-400 font-medium">Total 자산</p>
+          </div>
+          <div className="flex items-end gap-2 mb-6">
+            <h2 className="text-[36px] font-black text-white tracking-tight leading-none">
+              {assetData.total.totalValue === 0 ? '0원' : formatKRW(assetData.total.totalValue)}
+            </h2>
+          </div>
+          <div className="bg-white/5 rounded-[20px] p-5 flex justify-between items-center backdrop-blur-md border border-white/5">
+            <div className="text-[13px] text-gray-400 space-y-1.5">
+              <p>총 투자 원금</p>
+              <p>총 수익금</p>
+            </div>
+            <div className="text-[14px] font-bold text-right space-y-1.5">
+              <p className="text-gray-100">{formatKRW(assetData.total.principal)}</p>
+              <p className={getColorClass(assetData.total.profit, true)}>
+                {assetData.total.profit > 0 && '+'}{formatKRW(assetData.total.profit)} 
+                <span className="ml-1 text-[12px] opacity-90">({assetData.total.rate > 0 && '+'}{assetData.total.rate.toFixed(2)}%)</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. 장기 투자 상세 카드 */}
+        <div className="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-2.5">
+              <div className="bg-blue-50 p-2.5 rounded-[12px]">
+                <TrendingUp className="w-5 h-5 text-[#3182f6]" />
+              </div>
+              <h3 className="text-[18px] font-bold text-[#191f28]">장기 투자 (Q7S3)</h3>
+            </div>
+          </div>
+          
+          <div className="space-y-4.5 px-1">
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
+              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.principal)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
+              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.totalValue)}</span>
+            </div>
+            <div className="w-full h-[1px] bg-gray-100 my-2"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-medium text-[#6b7684]">총 수익금</span>
+              <span className={`text-[16px] font-bold ${getColorClass(assetData.longTerm.profit)}`}>
+                {assetData.longTerm.profit > 0 && '+'}{formatKRW(assetData.longTerm.profit)} 
+                <span className="ml-1 text-[14px]">({assetData.longTerm.rate > 0 && '+'}{assetData.longTerm.rate.toFixed(2)}%)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. 배당 투자 상세 카드 */}
+        <div className="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
+          <div className="flex items-center space-x-2.5 mb-6">
+            <div className="bg-yellow-50 p-2.5 rounded-[12px]">
+              <DollarSign className="w-5 h-5 text-yellow-600" />
+            </div>
+            <h3 className="text-[18px] font-bold text-[#191f28]">배당 투자 (Income)</h3>
+          </div>
+          
+          <div className="space-y-4 px-1 mb-6">
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
+              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.dividend.principal)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
+              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.dividend.totalValue)}</span>
+            </div>
+            <div className="w-full h-[1px] bg-gray-100 my-2"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-[15px] font-bold text-[#333d4b]">총 수익금</span>
+              <span className={`text-[16px] font-bold ${getColorClass(assetData.dividend.profit)}`}>
+                {assetData.dividend.profit > 0 && '+'}{formatKRW(assetData.dividend.profit)} 
+                <span className="ml-1 text-[14px]">({assetData.dividend.rate > 0 && '+'}{assetData.dividend.rate.toFixed(2)}%)</span>
+              </span>
+            </div>
+
+            <div className="bg-[#f9fafb] rounded-[16px] p-4 mt-2 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[13px] font-medium text-[#6b7684]">ㄴ 누적 배당수익</span>
+                <span className="text-[14px] font-semibold text-[#f04452]">
+                  +{formatKRW(assetData.dividend.totalDivs)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[13px] font-medium text-[#6b7684]">ㄴ 주가 평가손익</span>
+                <span className={`text-[14px] font-semibold ${getColorClass(assetData.dividend.capitalGain)}`}>
+                  {assetData.dividend.capitalGain > 0 && '+'}{formatKRW(assetData.dividend.capitalGain)}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* 헤더 */}
-          <header className="px-5 pt-12 pb-6 sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
-            <h1 className="text-[26px] font-extrabold text-[#191f28] tracking-tight">T기르&써니 자산현황</h1>
-            {assetData.timestamp && !assetData.isLocal && <p className="text-[13px] text-[#8b95a1] mt-1.5 font-medium">최근 업데이트: {new Date(assetData.timestamp).toLocaleString('ko-KR')}</p>}
-          </header>
-
-          <main className="px-5 max-w-md mx-auto space-y-6">
-            {/* 동기화 버튼 */}
-            {assetData.isLocal && (
-              <button onClick={handleSyncData} disabled={isUploading} className="w-full bg-gradient-to-r from-[#3182f6] to-[#2b72d6] text-white rounded-[20px] p-4.5 font-bold text-[15px] flex items-center justify-between shadow-lg active:scale-95 transition-transform px-5 py-4">
-                <span className="flex items-center">{isUploading ? <Icon.Refresh className="animate-spin mr-2" /> : <Icon.Cloud className="mr-2" />} 아내와 공유하기 (저장)</span>
-                <Icon.ChevronRight />
-              </button>
-            )}
-
-            {/* Total 자산 */}
-            <div className="bg-gradient-to-br from-[#1c1c1e] to-[#2c2c2e] rounded-[32px] p-7 shadow-xl border border-white/10 text-white">
-              <p className="text-[14px] text-gray-400 font-medium mb-2 flex items-center gap-1.5"><Icon.Wallet /> Total 자산</p>
-              <h2 className="text-[36px] font-black tracking-tight mb-6">{formatKRW(assetData.total.totalValue)}</h2>
-              <div className="bg-white/5 rounded-[20px] p-5 flex justify-between text-[13px]">
-                <div className="text-gray-400 space-y-1.5"><p>총 투자 원금</p><p>총 수익금</p></div>
-                <div className="text-right font-bold space-y-1.5"><p>{formatKRW(assetData.total.principal)}</p><p className={getColorClass(assetData.total.profit, true)}>{assetData.total.profit > 0 && '+'}{formatKRW(assetData.total.profit)} ({assetData.total.rate.toFixed(2)}%)</p></div>
-              </div>
+          {/* 당월 배당금 박스 */}
+          <div className="bg-blue-50/40 rounded-[20px] px-5 py-5 border border-blue-50 mt-4 flex justify-between items-center shadow-inner">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-2 h-2 rounded-full bg-[#f04452]"></div>
+              <span className="text-[15px] font-bold text-[#4e5968]">당월 배당금 ({currentMonthNum}월)</span>
             </div>
-
-            {/* 장기 투자 */}
-            <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100">
-              <h3 className="text-[18px] font-bold mb-6 flex items-center gap-2.5"><div className="bg-blue-50 p-2 rounded-xl"><Icon.TrendingUp /></div> 장기 투자 (Q7S3)</h3>
-              <div className="space-y-4 px-1 text-[15px]">
-                <div className="flex justify-between text-[#6b7684]"><span>투자 원금</span><span className="font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.principal)}</span></div>
-                <div className="flex justify-between text-[#6b7684]"><span>현재 평가 금액</span><span className="font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.totalValue)}</span></div>
-                <div className="h-px bg-gray-100" />
-                <div className="flex justify-between font-bold text-[#333d4b]"><span>총 수익금</span><span className={getColorClass(assetData.longTerm.profit)}>{assetData.longTerm.profit > 0 && '+'}{formatKRW(assetData.longTerm.profit)} ({assetData.longTerm.rate.toFixed(2)}%)</span></div>
-              </div>
-            </div>
-
-            {/* 배당 투자 */}
-            <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100">
-              <h3 className="text-[18px] font-bold mb-6 flex items-center gap-2.5"><div className="bg-yellow-50 p-2 text-yellow-600 rounded-xl"><Icon.DollarSign /></div> 배당 투자 (Income)</h3>
-              <div className="space-y-4 px-1 text-[15px]">
-                <div className="flex justify-between text-[#6b7684]"><span>투자 원금</span><span className="font-bold text-[#333d4b]">{formatKRW(assetData.dividend.principal)}</span></div>
-                <div className="flex justify-between text-[#6b7684]"><span>현재 평가 금액</span><span className="font-bold text-[#333d4b]">{formatKRW(assetData.dividend.totalValue)}</span></div>
-                <div className="h-px bg-gray-100" />
-                <div className="flex justify-between font-bold text-[#333d4b]"><span>총 수익금</span><span className={getColorClass(assetData.dividend.profit)}>{assetData.dividend.profit > 0 && '+'}{formatKRW(assetData.dividend.profit)} ({assetData.dividend.rate.toFixed(2)}%)</span></div>
-                <div className="bg-[#f9fafb] rounded-[16px] p-4 space-y-2 text-[13px]">
-                  <div className="flex justify-between text-[#6b7684]"><span>ㄴ 누적 배당수익</span><span className="text-[#f04452] font-bold">+{formatKRW(assetData.dividend.totalDivs)}</span></div>
-                  <div className="flex justify-between text-[#6b7684]"><span>ㄴ 주가 평가손익</span><span className={`font-bold ${getColorClass(assetData.dividend.capitalGain)}`}>{assetData.dividend.capitalGain > 0 && '+'}{formatKRW(assetData.dividend.capitalGain)}</span></div>
-                </div>
-              </div>
-              <div className="bg-blue-50/40 rounded-[20px] p-5 mt-5 flex justify-between items-center shadow-inner">
-                <span className="text-[15px] font-bold text-[#4e5968] flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#f04452]" /> 당월 배당금 ({currentMonthNum}월)</span>
-                <span className="text-[20px] font-black text-[#f04452]">{formatKRW(currentMonthDividend)}</span>
-              </div>
-            </div>
-          </main>
-
-          {/* 업로드 버튼 */}
-          <input type="file" accept=".json" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-          <button onClick={() => fileInputRef.current?.click()} className="fixed bottom-8 right-6 w-[60px] h-[60px] bg-[#3182f6] text-white rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all z-50"><Icon.Plus /></button>
+            <span className="text-[20px] font-black text-[#f04452]">
+              {currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원'}
+            </span>
+          </div>
         </div>
-      );
-    }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-</body>
-</html>
+      </main>
+    </div>
+  );
+}
