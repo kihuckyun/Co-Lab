@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 강력한 캐시 무효화 메타 태그 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>기르&써니 자산현황</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome 아이콘 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* 기본 폰트 적용 및 모바일 탭 하이라이트 제거 */
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
         body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
         .num-font { font-family: 'Verdana', 'Arial', sans-serif !important; letter-spacing: 0px; }
@@ -26,7 +29,7 @@
     <header class="px-5 pt-12 pb-6 flex justify-between items-end sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
         <div>
             <h1 class="text-[26px] font-extrabold text-[#191f28] tracking-tight flex items-center gap-2">
-                기르&써니 자산현황 <i class="fa-solid fa-heart-pulse text-emerald-500 animate-pulse text-xl"></i>
+                기르&써니 자산현황 <span class="text-[12px] font-bold text-blue-500 border border-blue-500 px-2 py-0.5 rounded-full ml-1">v2.1</span>
             </h1>
             <p id="last-update-time" class="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
                 데이터를 연결하는 중입니다...
@@ -134,9 +137,7 @@
         import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
-        // =====================================================================
-        // 💡 주석(//)을 완벽히 제거하여 키값이 활성화되었습니다!
-        // =====================================================================
+        // 유저님께서 입력해주신 실제 키값 그대로 적용
         const myFirebaseConfig = {
             apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
             authDomain: "total-asset-f1796.firebaseapp.com",
@@ -154,7 +155,6 @@
         
         const currentAppId = isCanvas && typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
 
-        // 🚨 스마트 에러 진단기 🚨
         const showError = (msg) => {
             const toast = document.getElementById('error-toast');
             document.getElementById('error-msg').innerHTML = msg;
@@ -171,12 +171,10 @@
                     if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
-                        // ⭐️ 핵심: 깃허브 등 외부 도메인에서 익명 로그인 시도
                         await signInAnonymously(auth);
                     }
                 } catch (e) {
                     console.error("인증 에러:", e);
-                    // 도메인 승인이 안 되어있을 때 정확한 에러 출력
                     if (e.code === 'auth/unauthorized-domain') {
                         showError("🚨 도메인 인증 차단 🚨<br>파이어베이스 -> Authentication -> Settings -> 승인된 도메인에 'github.io'를 추가하세요.");
                     } else {
@@ -253,12 +251,11 @@
                             if (t1 > 0 || t2 > 0) {
                                 latestTimeStr = new Date(Math.max(t1, t2)).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                             }
-                            document.getElementById('last-update-time').innerHTML = `마지막 동기화: ${latestTimeStr}`;
+                            document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-blue-500 mr-1"></i> 마지막 동기화: ${latestTimeStr}`;
                             document.getElementById('error-toast').classList.add('hidden');
                         }
                     }, (err) => {
                         console.error("DB 에러:", err);
-                        // 보안 규칙 거부일 경우
                         if (err.code === 'permission-denied') {
                             showError("🚨 권한 거부됨 (Missing permissions) 🚨<br>파이어베이스 [Rules] 탭에서 'match /{document=**}' 규칙을 적용했는지 확인하세요.");
                         } else {
