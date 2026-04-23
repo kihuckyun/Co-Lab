@@ -17,9 +17,9 @@
 </head>
 <body class="min-h-screen bg-[#f4f6f8] text-[#333d4b] pb-20 selection:bg-[#3182f6] selection:text-white">
 
-    <!-- 에러 알림 -->
-    <div id="error-toast" class="fixed top-4 left-0 right-0 z-50 hidden justify-center px-4 pointer-events-none">
-        <div id="error-msg" class="bg-red-100 text-red-600 px-5 py-3 rounded-full shadow-md font-bold text-sm"></div>
+    <!-- 진단 에러 알림 -->
+    <div id="error-toast" class="fixed top-4 left-0 right-0 z-50 hidden justify-center px-4 pointer-events-auto">
+        <div id="error-msg" class="bg-red-100 border border-red-300 text-red-700 px-5 py-3 rounded-2xl shadow-xl font-bold text-[13px] leading-relaxed text-center"></div>
     </div>
 
     <!-- 헤더 -->
@@ -29,13 +29,12 @@
                 기르&써니 자산현황 <i class="fa-solid fa-heart-pulse text-emerald-500 animate-pulse text-xl"></i>
             </h1>
             <p id="last-update-time" class="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
-                데이터를 기다리는 중입니다...
+                데이터를 연결하는 중입니다...
             </p>
         </div>
     </header>
 
     <main class="px-5 max-w-md mx-auto space-y-6">
-        
         <!-- 1. Total 자산 메인 카드 -->
         <div class="bg-gradient-to-br from-[#1c1c1e] via-[#252528] to-[#2c2c2e] rounded-[32px] p-7 shadow-[0_16px_40px_rgba(0,0,0,0.15)] border border-white/10 relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
@@ -68,7 +67,6 @@
                     <h3 class="text-[18px] font-bold text-[#191f28]">장기 투자 (Q7S3)</h3>
                 </div>
             </div>
-            
             <div class="space-y-4 px-1">
                 <div class="flex justify-between items-center">
                     <span class="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
@@ -94,7 +92,6 @@
                 </div>
                 <h3 class="text-[18px] font-bold text-[#191f28]">배당 투자 (Income)</h3>
             </div>
-            
             <div class="space-y-4 px-1 mb-6">
                 <div class="flex justify-between items-center">
                     <span class="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
@@ -109,7 +106,6 @@
                     <span class="text-[15px] font-bold text-[#333d4b]">총 수익금</span>
                     <span id="div-profit" class="text-[16px] font-bold text-gray-300 num-font">0원 <span class="ml-1 text-[14px]">(0.00%)</span></span>
                 </div>
-
                 <div class="bg-[#f9fafb] rounded-[16px] p-4 mt-2 space-y-2.5 border border-gray-100 shadow-inner">
                     <div class="flex justify-between items-center">
                         <span class="text-[13px] font-medium text-[#6b7684]">ㄴ 누적 배당수익</span>
@@ -121,7 +117,6 @@
                     </div>
                 </div>
             </div>
-
             <!-- 당월 배당금 박스 -->
             <div class="bg-blue-50/40 rounded-[20px] px-5 py-5 border border-blue-50 mt-4 flex justify-between items-center shadow-inner">
                 <div class="flex items-center space-x-2.5">
@@ -131,7 +126,6 @@
                 <span id="div-monthly" class="text-[20px] font-black text-[#f04452] num-font">0원</span>
             </div>
         </div>
-
     </main>
 
     <!-- Firebase 통신 로직 -->
@@ -141,15 +135,15 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
         // =====================================================================
-        // 💡 [마지막 세팅] 본인의 Firebase 설정값 6가지를 아래에 꼭 넣어주세요!
+        // 💡 주석(//)을 완벽히 제거하여 키값이 활성화되었습니다!
         // =====================================================================
         const myFirebaseConfig = {
-            // apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
-            // authDomain: "total-asset-f1796.firebaseapp.com",
-            // projectId: "total-asset-f1796",
-            // storageBucket: "total-asset-f1796.firebasestorage.app",
-            // messagingSenderId: "441490194600",
-            // appId: "1:441490194600:web:bd4889cb0796dd4694429d",
+            apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
+            authDomain: "total-asset-f1796.firebaseapp.com",
+            projectId: "total-asset-f1796",
+            storageBucket: "total-asset-f1796.firebasestorage.app",
+            messagingSenderId: "441490194600",
+            appId: "1:441490194600:web:bd4889cb0796dd4694429d"
         };
 
         const isCanvas = typeof __firebase_config !== 'undefined' && !myFirebaseConfig.apiKey;
@@ -158,74 +152,66 @@
         const auth = app ? getAuth(app) : null;
         const db = app ? getFirestore(app) : null;
         
-        // 🌟 캔버스 환경과 실제 배포 환경 호환
         const currentAppId = isCanvas && typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
 
-        // 에러 표시 함수
+        // 🚨 스마트 에러 진단기 🚨
         const showError = (msg) => {
             const toast = document.getElementById('error-toast');
-            document.getElementById('error-msg').innerText = msg;
+            document.getElementById('error-msg').innerHTML = msg;
             toast.classList.remove('hidden');
             toast.classList.add('flex');
+            document.getElementById('last-update-time').innerText = "오류 발생: 데이터 연결 중단";
         };
 
         if (!app) {
-            showError("파이어베이스 설정값(myFirebaseConfig)이 비어있습니다. 코드를 확인해주세요.");
+            showError("파이어베이스 설정값이 비어있습니다.");
         } else {
-            // 🌟 권한(Auth) 획득
             const initAuth = async () => {
                 try {
                     if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
+                        // ⭐️ 핵심: 깃허브 등 외부 도메인에서 익명 로그인 시도
                         await signInAnonymously(auth);
                     }
                 } catch (e) {
                     console.error("인증 에러:", e);
-                    showError("인증 실패: 파이어베이스 설정을 확인하세요.");
+                    // 도메인 승인이 안 되어있을 때 정확한 에러 출력
+                    if (e.code === 'auth/unauthorized-domain') {
+                        showError("🚨 도메인 인증 차단 🚨<br>파이어베이스 -> Authentication -> Settings -> 승인된 도메인에 'github.io'를 추가하세요.");
+                    } else {
+                        showError("인증 실패: " + e.message);
+                    }
                 }
             };
             initAuth();
 
-            // 숫자에 콤마 찍기 함수
             const formatKRW = (num) => Math.round(num || 0).toLocaleString('ko-KR') + '원';
             
-            // 색상 적용 함수
             const applyColorAndSign = (elId, val, isDarkTheme = false) => {
                 const el = document.getElementById(elId);
                 if(!el) return;
-                
                 const sign = val > 0 ? '+' : '';
                 el.innerHTML = `${sign}${formatKRW(val)}`;
-                
-                if (val > 0) {
-                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#ff5f6d]' : 'text-[#f04452]'}`;
-                } else if (val < 0) {
-                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#4facfe]' : 'text-[#3182f6]'}`;
-                } else {
-                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-gray-300' : 'text-[#333d4b]'}`;
-                }
+                if (val > 0) el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#ff5f6d]' : 'text-[#f04452]'}`;
+                else if (val < 0) el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#4facfe]' : 'text-[#3182f6]'}`;
+                else el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-gray-300' : 'text-[#333d4b]'}`;
             };
 
             const applyProfitDisplay = (elId, profit, rate, isDarkTheme = false) => {
                 const el = document.getElementById(elId);
                 if(!el) return;
-                
                 const sign = profit > 0 ? '+' : '';
                 let colorClass = isDarkTheme ? 'text-gray-300' : 'text-[#333d4b]';
-                
                 if (profit > 0) colorClass = isDarkTheme ? 'text-[#ff5f6d]' : 'text-[#f04452]';
                 else if (profit < 0) colorClass = isDarkTheme ? 'text-[#4facfe]' : 'text-[#3182f6]';
-
                 el.innerHTML = `${sign}${formatKRW(profit)} <span class="ml-1 text-[12px] sm:text-[14px] opacity-90">(${sign}${(rate || 0).toFixed(2)}%)</span>`;
                 el.className = `font-bold num-font ${colorClass} ${elId.includes('total-profit') ? 'text-[14px]' : 'text-[16px]'}`;
             };
 
-            // 당월 숫자 세팅
             const currentMonthNum = new Date().getMonth() + 1;
             document.getElementById('monthly-title').innerText = `당월 배당금 (${currentMonthNum}월)`;
 
-            // 실시간 데이터 수신 대기
             onAuthStateChanged(auth, (user) => {
                 if (user && db) {
                     const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
@@ -236,34 +222,21 @@
                             const lt = data.longTerm || {};
                             const div = data.dividend || {};
 
-                            const lt_p = lt.principal || 0;
-                            const lt_v = lt.totalValue || 0;
-                            const lt_pf = lt.profit || 0;
-                            const lt_r = lt.rate || 0;
+                            const lt_p = lt.principal || 0; const lt_v = lt.totalValue || 0; const lt_pf = lt.profit || 0; const lt_r = lt.rate || 0;
+                            const div_p = div.principal || 0; const div_v = div.totalValue || 0; const div_pf = div.profit || 0; const div_r = div.rate || 0;
+                            const div_acc = div.totalDivs || 0; const div_cap = div.capitalGain || 0;
 
-                            const div_p = div.principal || 0;
-                            const div_v = div.totalValue || 0;
-                            const div_pf = div.profit || 0;
-                            const div_r = div.rate || 0;
-                            const div_acc = div.totalDivs || 0;
-                            const div_cap = div.capitalGain || 0;
-
-                            const total_p = lt_p + div_p;
-                            const total_v = lt_v + div_v;
-                            const total_pf = lt_pf + div_pf;
+                            const total_p = lt_p + div_p; const total_v = lt_v + div_v; const total_pf = lt_pf + div_pf;
                             const total_r = total_p > 0 ? (total_pf / total_p) * 100 : 0;
 
-                            // Total 자산
                             document.getElementById('total-val').innerText = total_v === 0 ? '0원' : formatKRW(total_v);
                             document.getElementById('total-principal').innerText = formatKRW(total_p);
                             applyProfitDisplay('total-profit', total_pf, total_r, true);
 
-                            // 장기 투자
                             document.getElementById('lt-principal').innerText = formatKRW(lt_p);
                             document.getElementById('lt-val').innerText = formatKRW(lt_v);
                             applyProfitDisplay('lt-profit', lt_pf, lt_r, false);
 
-                            // 배당 투자
                             document.getElementById('div-principal').innerText = formatKRW(div_p);
                             document.getElementById('div-val').innerText = formatKRW(div_v);
                             applyProfitDisplay('div-profit', div_pf, div_r, false);
@@ -274,23 +247,23 @@
                             const currentMonthDividend = div.monthlyDivs ? (div.monthlyDivs[currentMonthNum] || 0) : 0;
                             document.getElementById('div-monthly').innerText = currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원';
 
-                            // 마지막 동기화 시간
                             const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
                             const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
                             let latestTimeStr = "기록 없음";
-                            
                             if (t1 > 0 || t2 > 0) {
-                                const latestDate = new Date(Math.max(t1, t2));
-                                latestTimeStr = latestDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                                latestTimeStr = new Date(Math.max(t1, t2)).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                             }
                             document.getElementById('last-update-time').innerHTML = `마지막 동기화: ${latestTimeStr}`;
-                            
-                            // 에러창 숨기기
                             document.getElementById('error-toast').classList.add('hidden');
                         }
                     }, (err) => {
-                        console.error(err);
-                        showError("데이터를 수신할 수 없습니다. 파이어베이스 규칙을 확인하세요.");
+                        console.error("DB 에러:", err);
+                        // 보안 규칙 거부일 경우
+                        if (err.code === 'permission-denied') {
+                            showError("🚨 권한 거부됨 (Missing permissions) 🚨<br>파이어베이스 [Rules] 탭에서 'match /{document=**}' 규칙을 적용했는지 확인하세요.");
+                        } else {
+                            showError("데이터 수신 오류: " + err.message);
+                        }
                     });
                 }
             });
