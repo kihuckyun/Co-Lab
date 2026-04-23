@@ -1,255 +1,287 @@
-import React, { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, DollarSign, Activity } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>기르&써니 자산현황</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 아이콘 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 기본 폰트 적용 및 모바일 탭 하이라이트 제거 */
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .num-font { font-family: 'Verdana', 'Arial', sans-serif !important; letter-spacing: 0px; }
+    </style>
+</head>
+<body class="min-h-screen bg-[#f4f6f8] text-[#333d4b] pb-20 selection:bg-[#3182f6] selection:text-white">
 
-// =====================================================================
-// 💡 [마지막 세팅] 본인의 Firebase 설정값 6가지를 아래에 꼭 넣어주세요!
-// =====================================================================
-const myFirebaseConfig = {
-  // apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
-  // authDomain: "total-asset-f1796.firebaseapp.com",
-  // projectId: "total-asset-f1796",
-  // storageBucket: "total-asset-f1796.firebasestorage.app",
-  // messagingSenderId: "441490194600",
-  // appId: "1:441490194600:web:bd4889cb0796dd4694429d"
-};
-
-const firebaseConfig = Object.keys(myFirebaseConfig).length > 0 ? myFirebaseConfig : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
-const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
-const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
-
-// 기본 뼈대 데이터 (데이터가 오기 전 빈 화면)
-const defaultData = {
-  longTerm: { principal: 0, totalValue: 0, profit: 0, rate: 0, timestamp: null },
-  dividend: { principal: 0, rawPrincipal: 0, totalValue: 0, capitalGain: 0, totalDivs: 0, profit: 0, rate: 0, monthlyDivs: {}, timestamp: null },
-  total: { principal: 0, totalValue: 0, profit: 0, rate: 0 },
-  latestTimestamp: null,
-};
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [assetData, setAssetData] = useState(defaultData);
-  const [error, setError] = useState(null);
-
-  // 1. Firebase 인증 (권한 획득)
-  useEffect(() => {
-    if (!app) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("인증 에러:", err);
-      }
-    };
-    initAuth();
-
-    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
-    return () => unsubscribeAuth();
-  }, []);
-
-  // 2. 실시간 데이터 수신 (업로드 기능 삭제, 순수 리스너 역할만 수행)
-  useEffect(() => {
-    if (!user || !db) return;
-
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_assets', 'latest_status');
-    const unsubscribeDB = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        
-        // 장투와 배당 앱에서 각각 날아온 데이터를 병합
-        const lt = data.longTerm || defaultData.longTerm;
-        const div = data.dividend || defaultData.dividend;
-
-        // Total 자산 자동 합산
-        const totalPrincipal = (lt.principal || 0) + (div.principal || 0);
-        const totalValue = (lt.totalValue || 0) + (div.totalValue || 0);
-        const totalProfit = (lt.profit || 0) + (div.profit || 0);
-        const totalRate = totalPrincipal > 0 ? (totalProfit / totalPrincipal) * 100 : 0;
-
-        // 가장 최근에 업데이트된 시간 찾기
-        const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
-        const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
-        const latestTime = t1 > t2 ? lt.timestamp : div.timestamp;
-
-        setAssetData({
-          longTerm: lt,
-          dividend: div,
-          total: { principal: totalPrincipal, totalValue: totalValue, profit: totalProfit, rate: totalRate },
-          latestTimestamp: latestTime
-        });
-      }
-    }, (err) => {
-      console.error("데이터 수신 에러:", err);
-      setError("데이터를 불러오지 못했습니다.");
-    });
-
-    return () => unsubscribeDB();
-  }, [user]);
-
-  // 포맷팅 헬퍼
-  const formatKRW = (num) => new Intl.NumberFormat('ko-KR').format(Math.round(num || 0)) + '원';
-
-  // 상승/하락 색상 헬퍼
-  const getColorClass = (value, isDark = false) => {
-    if (value > 0) return isDark ? 'text-[#ff5f6d]' : 'text-[#f04452]';
-    if (value < 0) return isDark ? 'text-[#4facfe]' : 'text-[#3182f6]';
-    return isDark ? 'text-gray-300' : 'text-[#333d4b]';
-  };
-
-  // 날짜 계산 (당월 배당금 표시용)
-  const currentMonthNum = new Date().getMonth() + 1;
-  const currentMonthDividend = assetData.dividend.monthlyDivs ? (assetData.dividend.monthlyDivs[currentMonthNum] || 0) : 0;
-
-  return (
-    <div className="min-h-screen bg-[#f4f6f8] text-[#333d4b] pb-20 font-sans relative selection:bg-[#3182f6] selection:text-white">
-      
-      {/* 에러 알림 */}
-      {error && (
-        <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
-          <div className="bg-red-100 text-red-600 px-5 py-3 rounded-full shadow-md font-bold text-sm">
-            {error}
-          </div>
-        </div>
-      )}
-
-      {/* 헤더 */}
-      <header className="px-5 pt-12 pb-6 flex justify-between items-end sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
-        <div>
-          <h1 className="text-[26px] font-extrabold text-[#191f28] tracking-tight flex items-center gap-2">
-            기르&써니 자산현황 <Activity className="w-5 h-5 text-emerald-500 animate-pulse" />
-          </h1>
-          <p className="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
-            {assetData.latestTimestamp 
-              ? `마지막 동기화: ${new Date(assetData.latestTimestamp).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` 
-              : '데이터를 기다리는 중입니다...'}
-          </p>
-        </div>
-      </header>
-
-      <main className="px-5 max-w-md mx-auto space-y-6">
-        
-        {/* 1. Total 자산 메인 카드 */}
-        <div className="bg-gradient-to-br from-[#1c1c1e] via-[#252528] to-[#2c2c2e] rounded-[32px] p-7 shadow-[0_16px_40px_rgba(0,0,0,0.15)] border border-white/10 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-          <div className="flex items-center space-x-2 mb-2">
-            <Wallet className="w-4 h-4 text-gray-400" />
-            <p className="text-[14px] text-gray-400 font-medium">Total 자산</p>
-          </div>
-          <div className="flex items-end gap-2 mb-6">
-            <h2 className="text-[36px] font-black text-white tracking-tight leading-none">
-              {assetData.total.totalValue === 0 ? '0원' : formatKRW(assetData.total.totalValue)}
-            </h2>
-          </div>
-          <div className="bg-white/5 rounded-[20px] p-5 flex justify-between items-center backdrop-blur-md border border-white/5">
-            <div className="text-[13px] text-gray-400 space-y-1.5">
-              <p>총 투자 원금</p>
-              <p>총 수익금</p>
-            </div>
-            <div className="text-[14px] font-bold text-right space-y-1.5">
-              <p className="text-gray-100">{formatKRW(assetData.total.principal)}</p>
-              <p className={getColorClass(assetData.total.profit, true)}>
-                {assetData.total.profit > 0 && '+'}{formatKRW(assetData.total.profit)} 
-                <span className="ml-1 text-[12px] opacity-90">({assetData.total.rate > 0 && '+'}{assetData.total.rate.toFixed(2)}%)</span>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. 장기 투자 상세 카드 */}
-        <div className="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-2.5">
-              <div className="bg-blue-50 p-2.5 rounded-[12px]">
-                <TrendingUp className="w-5 h-5 text-[#3182f6]" />
-              </div>
-              <h3 className="text-[18px] font-bold text-[#191f28]">장기 투자 (Q7S3)</h3>
-            </div>
-          </div>
-          
-          <div className="space-y-4.5 px-1">
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
-              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.principal)}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
-              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.longTerm.totalValue)}</span>
-            </div>
-            <div className="w-full h-[1px] bg-gray-100 my-2"></div>
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-medium text-[#6b7684]">총 수익금</span>
-              <span className={`text-[16px] font-bold ${getColorClass(assetData.longTerm.profit)}`}>
-                {assetData.longTerm.profit > 0 && '+'}{formatKRW(assetData.longTerm.profit)} 
-                <span className="ml-1 text-[14px]">({assetData.longTerm.rate > 0 && '+'}{assetData.longTerm.rate.toFixed(2)}%)</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. 배당 투자 상세 카드 */}
-        <div className="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
-          <div className="flex items-center space-x-2.5 mb-6">
-            <div className="bg-yellow-50 p-2.5 rounded-[12px]">
-              <DollarSign className="w-5 h-5 text-yellow-600" />
-            </div>
-            <h3 className="text-[18px] font-bold text-[#191f28]">배당 투자 (Income)</h3>
-          </div>
-          
-          <div className="space-y-4 px-1 mb-6">
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
-              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.dividend.principal)}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
-              <span className="text-[16px] font-bold text-[#333d4b]">{formatKRW(assetData.dividend.totalValue)}</span>
-            </div>
-            <div className="w-full h-[1px] bg-gray-100 my-2"></div>
-            <div className="flex justify-between items-center">
-              <span className="text-[15px] font-bold text-[#333d4b]">총 수익금</span>
-              <span className={`text-[16px] font-bold ${getColorClass(assetData.dividend.profit)}`}>
-                {assetData.dividend.profit > 0 && '+'}{formatKRW(assetData.dividend.profit)} 
-                <span className="ml-1 text-[14px]">({assetData.dividend.rate > 0 && '+'}{assetData.dividend.rate.toFixed(2)}%)</span>
-              </span>
-            </div>
-
-            <div className="bg-[#f9fafb] rounded-[16px] p-4 mt-2 space-y-2.5">
-              <div className="flex justify-between items-center">
-                <span className="text-[13px] font-medium text-[#6b7684]">ㄴ 누적 배당수익</span>
-                <span className="text-[14px] font-semibold text-[#f04452]">
-                  +{formatKRW(assetData.dividend.totalDivs)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[13px] font-medium text-[#6b7684]">ㄴ 주가 평가손익</span>
-                <span className={`text-[14px] font-semibold ${getColorClass(assetData.dividend.capitalGain)}`}>
-                  {assetData.dividend.capitalGain > 0 && '+'}{formatKRW(assetData.dividend.capitalGain)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 당월 배당금 박스 */}
-          <div className="bg-blue-50/40 rounded-[20px] px-5 py-5 border border-blue-50 mt-4 flex justify-between items-center shadow-inner">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-2 h-2 rounded-full bg-[#f04452]"></div>
-              <span className="text-[15px] font-bold text-[#4e5968]">당월 배당금 ({currentMonthNum}월)</span>
-            </div>
-            <span className="text-[20px] font-black text-[#f04452]">
-              {currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원'}
-            </span>
-          </div>
-        </div>
-
-      </main>
+    <!-- 에러 알림 -->
+    <div id="error-toast" class="fixed top-4 left-0 right-0 z-50 hidden justify-center px-4 pointer-events-none">
+        <div id="error-msg" class="bg-red-100 text-red-600 px-5 py-3 rounded-full shadow-md font-bold text-sm"></div>
     </div>
-  );
-}
+
+    <!-- 헤더 -->
+    <header class="px-5 pt-12 pb-6 flex justify-between items-end sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
+        <div>
+            <h1 class="text-[26px] font-extrabold text-[#191f28] tracking-tight flex items-center gap-2">
+                기르&써니 자산현황 <i class="fa-solid fa-heart-pulse text-emerald-500 animate-pulse text-xl"></i>
+            </h1>
+            <p id="last-update-time" class="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
+                데이터를 기다리는 중입니다...
+            </p>
+        </div>
+    </header>
+
+    <main class="px-5 max-w-md mx-auto space-y-6">
+        
+        <!-- 1. Total 자산 메인 카드 -->
+        <div class="bg-gradient-to-br from-[#1c1c1e] via-[#252528] to-[#2c2c2e] rounded-[32px] p-7 shadow-[0_16px_40px_rgba(0,0,0,0.15)] border border-white/10 relative overflow-hidden">
+            <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+            <div class="flex items-center space-x-2 mb-2">
+                <i class="fa-solid fa-wallet text-gray-400"></i>
+                <p class="text-[14px] text-gray-400 font-medium">Total 자산</p>
+            </div>
+            <div class="flex items-end gap-2 mb-6">
+                <h2 id="total-val" class="text-[36px] font-black text-white tracking-tight leading-none num-font">0원</h2>
+            </div>
+            <div class="bg-white/5 rounded-[20px] p-5 flex justify-between items-center backdrop-blur-md border border-white/5">
+                <div class="text-[13px] text-gray-400 space-y-1.5">
+                    <p>총 투자 원금</p>
+                    <p>총 수익금</p>
+                </div>
+                <div class="text-[14px] font-bold text-right space-y-1.5">
+                    <p id="total-principal" class="text-gray-100 num-font">0원</p>
+                    <p id="total-profit" class="text-gray-300 num-font">0원 <span class="ml-1 text-[12px] opacity-90">(0.00%)</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 장기 투자 상세 카드 -->
+        <div class="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center space-x-2.5">
+                    <div class="bg-blue-50 w-10 h-10 flex justify-center items-center rounded-[12px]">
+                        <i class="fa-solid fa-arrow-trend-up text-[#3182f6] text-lg"></i>
+                    </div>
+                    <h3 class="text-[18px] font-bold text-[#191f28]">장기 투자 (Q7S3)</h3>
+                </div>
+            </div>
+            
+            <div class="space-y-4 px-1">
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
+                    <span id="lt-principal" class="text-[16px] font-bold text-[#333d4b] num-font">0원</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
+                    <span id="lt-val" class="text-[16px] font-bold text-[#333d4b] num-font">0원</span>
+                </div>
+                <div class="w-full h-[1px] bg-gray-100 my-2"></div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-medium text-[#6b7684]">총 수익금</span>
+                    <span id="lt-profit" class="text-[16px] font-bold text-gray-300 num-font">0원 <span class="ml-1 text-[14px]">(0.00%)</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 배당 투자 상세 카드 -->
+        <div class="bg-white rounded-[28px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80">
+            <div class="flex items-center space-x-2.5 mb-6">
+                <div class="bg-yellow-50 w-10 h-10 flex justify-center items-center rounded-[12px]">
+                    <i class="fa-solid fa-coins text-yellow-600 text-lg"></i>
+                </div>
+                <h3 class="text-[18px] font-bold text-[#191f28]">배당 투자 (Income)</h3>
+            </div>
+            
+            <div class="space-y-4 px-1 mb-6">
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-medium text-[#6b7684]">투자 원금</span>
+                    <span id="div-principal" class="text-[16px] font-bold text-[#333d4b] num-font">0원</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-medium text-[#6b7684]">현재 평가 금액</span>
+                    <span id="div-val" class="text-[16px] font-bold text-[#333d4b] num-font">0원</span>
+                </div>
+                <div class="w-full h-[1px] bg-gray-100 my-2"></div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[15px] font-bold text-[#333d4b]">총 수익금</span>
+                    <span id="div-profit" class="text-[16px] font-bold text-gray-300 num-font">0원 <span class="ml-1 text-[14px]">(0.00%)</span></span>
+                </div>
+
+                <div class="bg-[#f9fafb] rounded-[16px] p-4 mt-2 space-y-2.5 border border-gray-100 shadow-inner">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[13px] font-medium text-[#6b7684]">ㄴ 누적 배당수익</span>
+                        <span id="div-acc" class="text-[14px] font-semibold text-[#f04452] num-font">+0원</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[13px] font-medium text-[#6b7684]">ㄴ 주가 평가손익</span>
+                        <span id="div-capgain" class="text-[14px] font-semibold text-gray-300 num-font">0원</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 당월 배당금 박스 -->
+            <div class="bg-blue-50/40 rounded-[20px] px-5 py-5 border border-blue-50 mt-4 flex justify-between items-center shadow-inner">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-2 h-2 rounded-full bg-[#f04452]"></div>
+                    <span id="monthly-title" class="text-[15px] font-bold text-[#4e5968]">당월 배당금 (월)</span>
+                </div>
+                <span id="div-monthly" class="text-[20px] font-black text-[#f04452] num-font">0원</span>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Firebase 통신 로직 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+        // =====================================================================
+        // 💡 [마지막 세팅] 본인의 Firebase 설정값 6가지를 아래에 꼭 넣어주세요!
+        // =====================================================================
+        const myFirebaseConfig = {
+            // apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
+            // authDomain: "total-asset-f1796.firebaseapp.com",
+            // projectId: "total-asset-f1796",
+            // storageBucket: "total-asset-f1796.firebasestorage.app",
+            // messagingSenderId: "441490194600",
+            // appId: "1:441490194600:web:bd4889cb0796dd4694429d"
+        };
+
+        const firebaseConfig = Object.keys(myFirebaseConfig).length > 0 && myFirebaseConfig.apiKey ? myFirebaseConfig : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
+        const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
+        const auth = app ? getAuth(app) : null;
+        const db = app ? getFirestore(app) : null;
+        
+        // 에러 표시 함수
+        const showError = (msg) => {
+            const toast = document.getElementById('error-toast');
+            document.getElementById('error-msg').innerText = msg;
+            toast.classList.remove('hidden');
+            toast.classList.add('flex');
+        };
+
+        if (!app) {
+            showError("파이어베이스 설정값(myFirebaseConfig)이 비어있습니다. 코드를 확인해주세요.");
+        } else {
+            // 익명 로그인 수행
+            signInAnonymously(auth).catch(e => {
+                console.error("인증 에러:", e);
+                showError("인증 실패: 파이어베이스 설정을 확인하세요.");
+            });
+
+            // 숫자에 콤마 찍기 함수
+            const formatKRW = (num) => Math.round(num || 0).toLocaleString('ko-KR') + '원';
+            
+            // 색상 적용 함수
+            const applyColorAndSign = (elId, val, isDarkTheme = false) => {
+                const el = document.getElementById(elId);
+                if(!el) return;
+                
+                const sign = val > 0 ? '+' : '';
+                el.innerHTML = `${sign}${formatKRW(val)}`;
+                
+                if (val > 0) {
+                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#ff5f6d]' : 'text-[#f04452]'}`;
+                } else if (val < 0) {
+                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-[#4facfe]' : 'text-[#3182f6]'}`;
+                } else {
+                    el.className = `text-[14px] sm:text-[16px] font-bold num-font ${isDarkTheme ? 'text-gray-300' : 'text-[#333d4b]'}`;
+                }
+            };
+
+            const applyProfitDisplay = (elId, profit, rate, isDarkTheme = false) => {
+                const el = document.getElementById(elId);
+                if(!el) return;
+                
+                const sign = profit > 0 ? '+' : '';
+                let colorClass = isDarkTheme ? 'text-gray-300' : 'text-[#333d4b]';
+                
+                if (profit > 0) colorClass = isDarkTheme ? 'text-[#ff5f6d]' : 'text-[#f04452]';
+                else if (profit < 0) colorClass = isDarkTheme ? 'text-[#4facfe]' : 'text-[#3182f6]';
+
+                el.innerHTML = `${sign}${formatKRW(profit)} <span class="ml-1 text-[12px] sm:text-[14px] opacity-90">(${sign}${(rate || 0).toFixed(2)}%)</span>`;
+                el.className = `font-bold num-font ${colorClass} ${elId.includes('total-profit') ? 'text-[14px]' : 'text-[16px]'}`;
+            };
+
+            // 당월 숫자 세팅
+            const currentMonthNum = new Date().getMonth() + 1;
+            document.getElementById('monthly-title').innerText = `당월 배당금 (${currentMonthNum}월)`;
+
+            // 실시간 데이터 수신 대기
+            auth.onAuthStateChanged((user) => {
+                if (user && db) {
+                    const docRef = doc(db, 'artifacts', 'gire-sunny-asset-app', 'public', 'data', 'shared_assets', 'latest_status');
+                    
+                    onSnapshot(docRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            const data = snapshot.data();
+                            const lt = data.longTerm || {};
+                            const div = data.dividend || {};
+
+                            const lt_p = lt.principal || 0;
+                            const lt_v = lt.totalValue || 0;
+                            const lt_pf = lt.profit || 0;
+                            const lt_r = lt.rate || 0;
+
+                            const div_p = div.principal || 0;
+                            const div_v = div.totalValue || 0;
+                            const div_pf = div.profit || 0;
+                            const div_r = div.rate || 0;
+                            const div_acc = div.totalDivs || 0;
+                            const div_cap = div.capitalGain || 0;
+
+                            const total_p = lt_p + div_p;
+                            const total_v = lt_v + div_v;
+                            const total_pf = lt_pf + div_pf;
+                            const total_r = total_p > 0 ? (total_pf / total_p) * 100 : 0;
+
+                            // Total 자산
+                            document.getElementById('total-val').innerText = total_v === 0 ? '0원' : formatKRW(total_v);
+                            document.getElementById('total-principal').innerText = formatKRW(total_p);
+                            applyProfitDisplay('total-profit', total_pf, total_r, true);
+
+                            // 장기 투자
+                            document.getElementById('lt-principal').innerText = formatKRW(lt_p);
+                            document.getElementById('lt-val').innerText = formatKRW(lt_v);
+                            applyProfitDisplay('lt-profit', lt_pf, lt_r, false);
+
+                            // 배당 투자
+                            document.getElementById('div-principal').innerText = formatKRW(div_p);
+                            document.getElementById('div-val').innerText = formatKRW(div_v);
+                            applyProfitDisplay('div-profit', div_pf, div_r, false);
+                            
+                            document.getElementById('div-acc').innerText = `+${formatKRW(div_acc)}`;
+                            applyColorAndSign('div-capgain', div_cap, false);
+
+                            const currentMonthDividend = div.monthlyDivs ? (div.monthlyDivs[currentMonthNum] || 0) : 0;
+                            document.getElementById('div-monthly').innerText = currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원';
+
+                            // 마지막 동기화 시간
+                            const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
+                            const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
+                            let latestTimeStr = "기록 없음";
+                            
+                            if (t1 > 0 || t2 > 0) {
+                                const latestDate = new Date(Math.max(t1, t2));
+                                latestTimeStr = latestDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            }
+                            document.getElementById('last-update-time').innerHTML = `마지막 동기화: ${latestTimeStr}`;
+                            
+                            // 에러창 숨기기
+                            document.getElementById('error-toast').classList.add('hidden');
+                        }
+                    }, (err) => {
+                        console.error(err);
+                        showError("데이터를 수신할 수 없습니다. 파이어베이스 규칙을 확인하세요.");
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
