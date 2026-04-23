@@ -264,13 +264,19 @@
                         const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
                         const snapshot = await getDoc(docRef);
                         if (snapshot.exists()) {
+                            // 1. 가져온 데이터로 화면 업데이트 (시간 포함)
                             updateDashboardUI(snapshot.data());
                             
-                            // 성공 시 잠깐 반짝이는 텍스트 효과
+                            // 2. 업데이트된 원래 HTML 저장
                             const timeText = document.getElementById('last-update-time');
                             const originalHtml = timeText.innerHTML;
-                            timeText.innerHTML = `<span class="text-blue-500 font-bold"><i class="fa-solid fa-arrows-rotate fa-spin mr-1"></i> 데이터 최신화 완료!</span>`;
-                            setTimeout(() => { timeText.innerHTML = originalHtml; }, 1500);
+                            
+                            // 3. 지금 확인했다는 명확한 피드백 메시지 띄우기 (초 단위까지)
+                            const nowTime = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            timeText.innerHTML = `<span class="text-blue-500 font-bold"><i class="fa-solid fa-check mr-1"></i> ${nowTime} 확인: 변경 사항 반영됨!</span>`;
+                            
+                            // 4. 2.5초 뒤에 다시 원래 시간 표시로 복구
+                            setTimeout(() => { timeText.innerHTML = originalHtml; }, 2500);
                         }
                     }
                 } catch (err) {
