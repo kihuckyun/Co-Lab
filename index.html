@@ -138,7 +138,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
         // =====================================================================
         // 💡 [마지막 세팅] 본인의 Firebase 설정값 6가지를 아래에 꼭 넣어주세요!
@@ -149,14 +149,18 @@
             // projectId: "total-asset-f1796",
             // storageBucket: "total-asset-f1796.firebasestorage.app",
             // messagingSenderId: "441490194600",
-            // appId: "1:441490194600:web:bd4889cb0796dd4694429d"
+            // appId: "1:441490194600:web:bd4889cb0796dd4694429d",
         };
 
-        const firebaseConfig = Object.keys(myFirebaseConfig).length > 0 && myFirebaseConfig.apiKey ? myFirebaseConfig : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
+        const isCanvas = typeof __firebase_config !== 'undefined' && !myFirebaseConfig.apiKey;
+        const firebaseConfig = myFirebaseConfig.apiKey ? myFirebaseConfig : (isCanvas ? JSON.parse(__firebase_config) : {});
         const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
         const auth = app ? getAuth(app) : null;
         const db = app ? getFirestore(app) : null;
         
+        // 🌟 캔버스 환경과 실제 배포 환경 호환
+        const currentAppId = isCanvas && typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
+
         // 에러 표시 함수
         const showError = (msg) => {
             const toast = document.getElementById('error-toast');
@@ -168,11 +172,20 @@
         if (!app) {
             showError("파이어베이스 설정값(myFirebaseConfig)이 비어있습니다. 코드를 확인해주세요.");
         } else {
-            // 익명 로그인 수행
-            signInAnonymously(auth).catch(e => {
-                console.error("인증 에러:", e);
-                showError("인증 실패: 파이어베이스 설정을 확인하세요.");
-            });
+            // 🌟 권한(Auth) 획득
+            const initAuth = async () => {
+                try {
+                    if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (e) {
+                    console.error("인증 에러:", e);
+                    showError("인증 실패: 파이어베이스 설정을 확인하세요.");
+                }
+            };
+            initAuth();
 
             // 숫자에 콤마 찍기 함수
             const formatKRW = (num) => Math.round(num || 0).toLocaleString('ko-KR') + '원';
@@ -213,9 +226,9 @@
             document.getElementById('monthly-title').innerText = `당월 배당금 (${currentMonthNum}월)`;
 
             // 실시간 데이터 수신 대기
-            auth.onAuthStateChanged((user) => {
+            onAuthStateChanged(auth, (user) => {
                 if (user && db) {
-                    const docRef = doc(db, 'artifacts', 'gire-sunny-asset-app', 'public', 'data', 'shared_assets', 'latest_status');
+                    const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
                     
                     onSnapshot(docRef, (snapshot) => {
                         if (snapshot.exists()) {
