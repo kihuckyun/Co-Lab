@@ -29,13 +29,13 @@
     <header class="px-5 pt-12 pb-6 flex justify-between items-end sticky top-0 bg-[#f4f6f8]/80 backdrop-blur-xl z-40">
         <div>
             <h1 class="text-[26px] font-extrabold text-[#191f28] tracking-tight flex items-center gap-2">
-                기르&써니 자산현황 <span class="text-[12px] font-bold text-blue-500 border border-blue-500 px-2 py-0.5 rounded-full ml-1">v2.1</span>
+                기르&써니 자산현황 <span class="text-[12px] font-bold text-indigo-500 border border-indigo-500 px-2 py-0.5 rounded-full ml-1">v4.5 스마트통합</span>
             </h1>
             <p id="last-update-time" class="text-[13px] text-[#8b95a1] mt-1.5 font-medium">
                 데이터를 연결하는 중입니다...
             </p>
         </div>
-        <button onclick="manualSync()" id="sync-btn" class="mb-1 w-10 h-10 rounded-full bg-white shadow-sm border border-gray-200 text-gray-500 hover:text-[#3182f6] hover:border-[#3182f6] flex items-center justify-center transition-all active:scale-95 shrink-0" title="수동 동기화">
+        <button onclick="manualSync()" id="sync-btn" class="mb-1 w-10 h-10 rounded-full bg-white shadow-sm border border-gray-200 text-gray-500 hover:text-indigo-500 hover:border-indigo-500 flex items-center justify-center transition-all active:scale-95 shrink-0" title="수동 동기화">
             <i class="fa-solid fa-rotate"></i>
         </button>
     </header>
@@ -46,7 +46,7 @@
             <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
             <div class="flex items-center space-x-2 mb-2">
                 <i class="fa-solid fa-wallet text-gray-400"></i>
-                <p class="text-[14px] text-gray-400 font-medium">Total 자산</p>
+                <p class="text-[14px] text-gray-400 font-medium">부부 합산 Total 자산</p>
             </div>
             <div class="flex items-end gap-2 mb-6">
                 <h2 id="total-val" class="text-[36px] font-black text-white tracking-tight leading-none num-font">0원</h2>
@@ -70,7 +70,7 @@
                     <div class="bg-blue-50 w-10 h-10 flex justify-center items-center rounded-[12px]">
                         <i class="fa-solid fa-arrow-trend-up text-[#3182f6] text-lg"></i>
                     </div>
-                    <h3 class="text-[18px] font-bold text-[#191f28]">장기 투자 (Q7S3)</h3>
+                    <h3 class="text-[18px] font-bold text-[#191f28]">장기 투자 합산 (Q7S3)</h3>
                 </div>
             </div>
             <div class="space-y-4 px-1">
@@ -96,7 +96,7 @@
                 <div class="bg-yellow-50 w-10 h-10 flex justify-center items-center rounded-[12px]">
                     <i class="fa-solid fa-coins text-yellow-600 text-lg"></i>
                 </div>
-                <h3 class="text-[18px] font-bold text-[#191f28]">배당 투자 (Income)</h3>
+                <h3 class="text-[18px] font-bold text-[#191f28]">배당 투자 합산 (Income)</h3>
             </div>
             <div class="space-y-4 px-1 mb-6">
                 <div class="flex justify-between items-center">
@@ -124,10 +124,10 @@
                 </div>
             </div>
             <!-- 당월 배당금 박스 -->
-            <div class="bg-blue-50/40 rounded-[20px] px-5 py-5 border border-blue-50 mt-4 flex justify-between items-center shadow-inner">
+            <div class="bg-indigo-50/50 rounded-[20px] px-5 py-5 border border-indigo-100 mt-4 flex justify-between items-center shadow-inner">
                 <div class="flex items-center space-x-2.5">
                     <div class="w-2 h-2 rounded-full bg-[#f04452]"></div>
-                    <span id="monthly-title" class="text-[15px] font-bold text-[#4e5968]">당월 배당금 (월)</span>
+                    <span id="monthly-title" class="text-[15px] font-bold text-[#4e5968]">당월 배당금 합산 (월)</span>
                 </div>
                 <span id="div-monthly" class="text-[20px] font-black text-[#f04452] num-font">0원</span>
             </div>
@@ -140,7 +140,7 @@
         import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
-        // 유저님께서 입력해주신 실제 키값 그대로 적용
+        // 기존 키값 유지
         const myFirebaseConfig = {
             apiKey: "AIzaSyDrzoH50qvRtirqi4nAleoss5xTVLJJyL8",
             authDomain: "total-asset-f1796.firebaseapp.com",
@@ -157,6 +157,11 @@
         const db = app ? getFirestore(app) : null;
         
         const currentAppId = isCanvas && typeof __app_id !== 'undefined' ? __app_id : 'gire-sunny-asset-app';
+
+        // 💡 총 3개의 방 데이터를 담아둘 빈 그릇 생성
+        let dataOld = {};   // 남편의 수정 안 된 기존 장기투자앱용 (latest_status)
+        let dataHost1 = {}; // 남편 배당앱용 (latest_status_host1)
+        let dataHost2 = {}; // 아내 배당앱용 (latest_status_host2)
 
         const showError = (msg) => {
             const toast = document.getElementById('error-toast');
@@ -213,16 +218,33 @@
             const currentMonthNum = new Date().getMonth() + 1;
             document.getElementById('monthly-title').innerText = `당월 배당금 (${currentMonthNum}월)`;
 
-            // 💡 화면 그리기 로직 분리 (자동 & 수동 동기화에서 공통 사용)
-            const updateDashboardUI = (data) => {
-                const lt = data.longTerm || {};
-                const div = data.dividend || {};
+            // 💡 부부 합산 계산 및 화면 그리기 (방 3개 합산)
+            const updateCombinedDashboardUI = () => {
+                // 남편 장투 데이터 (기존 앱에서 보낸 latest_status 방의 데이터)
+                const lt_old = dataOld.longTerm || {}; 
+                
+                // 혹시 모를 새 방들의 데이터도 방어적으로 불러오기 (현재는 비어있겠지만)
+                const lt_1 = dataHost1.longTerm || {}; const div_1 = dataHost1.dividend || {};
+                const lt_2 = dataHost2.longTerm || {}; const div_2 = dataHost2.dividend || {};
 
-                const lt_p = lt.principal || 0; const lt_v = lt.totalValue || 0; const lt_pf = lt.profit || 0; const lt_r = lt.rate || 0;
-                const div_p = div.principal || 0; const div_v = div.totalValue || 0; const div_pf = div.profit || 0; const div_r = div.rate || 0;
-                const div_acc = div.totalDivs || 0; const div_cap = div.capitalGain || 0;
+                // 장기 투자 합산 (주로 lt_old가 메인이 됨)
+                const lt_p = (lt_old.principal || 0) + (lt_1.principal || 0) + (lt_2.principal || 0);
+                const lt_v = (lt_old.totalValue || 0) + (lt_1.totalValue || 0) + (lt_2.totalValue || 0);
+                const lt_pf = (lt_old.profit || 0) + (lt_1.profit || 0) + (lt_2.profit || 0);
+                const lt_r = lt_p > 0 ? (lt_pf / lt_p) * 100 : 0;
 
-                const total_p = lt_p + div_p; const total_v = lt_v + div_v; const total_pf = lt_pf + div_pf;
+                // 배당 투자 합산
+                const div_p = (div_1.principal || 0) + (div_2.principal || 0);
+                const div_v = (div_1.totalValue || 0) + (div_2.totalValue || 0);
+                const div_pf = (div_1.profit || 0) + (div_2.profit || 0);
+                const div_r = div_p > 0 ? (div_pf / div_p) * 100 : 0;
+                const div_acc = (div_1.totalDivs || 0) + (div_2.totalDivs || 0);
+                const div_cap = (div_1.capitalGain || 0) + (div_2.capitalGain || 0);
+
+                // 전체 자산 합산
+                const total_p = lt_p + div_p;
+                const total_v = lt_v + div_v;
+                const total_pf = lt_pf + div_pf;
                 const total_r = total_p > 0 ? (total_pf / total_p) * 100 : 0;
 
                 document.getElementById('total-val').innerText = total_v === 0 ? '0원' : formatKRW(total_v);
@@ -240,70 +262,87 @@
                 document.getElementById('div-acc').innerText = `+${formatKRW(div_acc)}`;
                 applyColorAndSign('div-capgain', div_cap, false);
 
-                const currentMonthDividend = div.monthlyDivs ? (div.monthlyDivs[currentMonthNum] || 0) : 0;
+                const currentMonthDividend = (div_1.monthlyDivs ? (div_1.monthlyDivs[currentMonthNum] || 0) : 0) + 
+                                             (div_2.monthlyDivs ? (div_2.monthlyDivs[currentMonthNum] || 0) : 0);
                 document.getElementById('div-monthly').innerText = currentMonthDividend > 0 ? formatKRW(currentMonthDividend) : '0원';
 
-                const t1 = lt.timestamp ? new Date(lt.timestamp).getTime() : 0;
-                const t2 = div.timestamp ? new Date(div.timestamp).getTime() : 0;
+                // 가장 최근에 업데이트된 시간을 찾음
+                const t0 = lt_old.timestamp ? new Date(lt_old.timestamp).getTime() : 0;
+                const t1 = lt_1.timestamp ? new Date(lt_1.timestamp).getTime() : 0;
+                const t2 = div_1.timestamp ? new Date(div_1.timestamp).getTime() : 0;
+                const t3 = lt_2.timestamp ? new Date(lt_2.timestamp).getTime() : 0;
+                const t4 = div_2.timestamp ? new Date(div_2.timestamp).getTime() : 0;
+                const maxT = Math.max(0, t0, t1, t2, t3, t4);
+
                 let latestTimeStr = "기록 없음";
-                if (t1 > 0 || t2 > 0) {
-                    latestTimeStr = new Date(Math.max(t1, t2)).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                if (maxT > 0) {
+                    latestTimeStr = new Date(maxT).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 }
-                document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-blue-500 mr-1"></i> 마지막 동기화: ${latestTimeStr}`;
                 document.getElementById('error-toast').classList.add('hidden');
+                
+                return latestTimeStr;
             };
 
-            // 💡 수동 동기화(새로고침) 버튼 클릭 이벤트
+            // 💡 수동 동기화(새로고침) 버튼 클릭 이벤트 (3개의 방 모두 확인)
             window.manualSync = async () => {
                 const btnIcon = document.querySelector('#sync-btn i');
-                if (btnIcon) btnIcon.classList.add('fa-spin'); // 아이콘 회전 시작
+                if (btnIcon) btnIcon.classList.add('fa-spin');
                 
                 try {
                     const user = auth.currentUser;
                     if (user && db) {
-                        const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
-                        const snapshot = await getDoc(docRef);
-                        if (snapshot.exists()) {
-                            // 1. 가져온 데이터로 화면 업데이트 (시간 포함)
-                            updateDashboardUI(snapshot.data());
-                            
-                            // 2. 업데이트된 원래 HTML 저장
-                            const timeText = document.getElementById('last-update-time');
-                            const originalHtml = timeText.innerHTML;
-                            
-                            // 3. 지금 확인했다는 명확한 피드백 메시지 띄우기 (초 단위까지)
-                            const nowTime = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                            timeText.innerHTML = `<span class="text-blue-500 font-bold"><i class="fa-solid fa-check mr-1"></i> ${nowTime} 확인: 변경 사항 반영됨!</span>`;
-                            
-                            // 4. 2.5초 뒤에 다시 원래 시간 표시로 복구
-                            setTimeout(() => { timeText.innerHTML = originalHtml; }, 2500);
-                        }
+                        const docRefOld = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
+                        const docRef1 = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status_host1');
+                        const docRef2 = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status_host2');
+                        
+                        const [snapOld, snap1, snap2] = await Promise.all([getDoc(docRefOld), getDoc(docRef1), getDoc(docRef2)]);
+                        
+                        if (snapOld.exists()) dataOld = snapOld.data();
+                        if (snap1.exists()) dataHost1 = snap1.data();
+                        if (snap2.exists()) dataHost2 = snap2.data();
+                        
+                        const latestTimeStr = updateCombinedDashboardUI();
+                        
+                        const timeText = document.getElementById('last-update-time');
+                        timeText.innerHTML = `<span class="text-indigo-500 font-bold"><i class="fa-solid fa-check mr-1"></i> ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} 확인: 변경 반영됨!</span>`;
+                        setTimeout(() => { 
+                            timeText.innerHTML = `<i class="fa-solid fa-check-circle text-indigo-500 mr-1"></i> 합산 동기화: ${latestTimeStr}`; 
+                        }, 2500);
                     }
                 } catch (err) {
                     console.error("수동 동기화 에러:", err);
                 } finally {
-                    setTimeout(() => {
-                        if (btnIcon) btnIcon.classList.remove('fa-spin'); // 아이콘 회전 종료
-                    }, 500);
+                    setTimeout(() => { if (btnIcon) btnIcon.classList.remove('fa-spin'); }, 500);
                 }
             };
 
+            // 💡 실시간 자동 감시 (3개의 카메라 가동)
             onAuthStateChanged(auth, (user) => {
                 if (user && db) {
-                    const docRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
+                    const docRefOld = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status');
+                    const docRef1 = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status_host1');
+                    const docRef2 = doc(db, 'artifacts', currentAppId, 'public', 'data', 'shared_assets', 'latest_status_host2');
                     
-                    onSnapshot(docRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                            updateDashboardUI(snapshot.data());
-                        }
-                    }, (err) => {
-                        console.error("DB 에러:", err);
-                        if (err.code === 'permission-denied') {
-                            showError("🚨 권한 거부됨 (Missing permissions) 🚨<br>파이어베이스 [Rules] 탭에서 'match /{document=**}' 규칙을 적용했는지 확인하세요.");
-                        } else {
-                            showError("데이터 수신 오류: " + err.message);
-                        }
-                    });
+                    // 기존 장기투자 방 감시
+                    onSnapshot(docRefOld, (snapshot) => {
+                        if (snapshot.exists()) { dataOld = snapshot.data(); }
+                        const latestTimeStr = updateCombinedDashboardUI();
+                        document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-indigo-500 mr-1"></i> 합산 동기화: ${latestTimeStr}`;
+                    }, (err) => { console.error("Old DB 에러:", err); });
+
+                    // Host1 방 감시
+                    onSnapshot(docRef1, (snapshot) => {
+                        if (snapshot.exists()) { dataHost1 = snapshot.data(); }
+                        const latestTimeStr = updateCombinedDashboardUI();
+                        document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-indigo-500 mr-1"></i> 합산 동기화: ${latestTimeStr}`;
+                    }, (err) => { console.error("Host1 DB 에러:", err); });
+
+                    // Host2 방 감시
+                    onSnapshot(docRef2, (snapshot) => {
+                        if (snapshot.exists()) { dataHost2 = snapshot.data(); }
+                        const latestTimeStr = updateCombinedDashboardUI();
+                        document.getElementById('last-update-time').innerHTML = `<i class="fa-solid fa-check-circle text-indigo-500 mr-1"></i> 합산 동기화: ${latestTimeStr}`;
+                    }, (err) => { console.error("Host2 DB 에러:", err); });
                 }
             });
         }
